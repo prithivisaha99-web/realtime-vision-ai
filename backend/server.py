@@ -9,6 +9,10 @@ from typing import List, Optional
 import cv2
 import numpy as np
 import torch
+
+# Limit PyTorch CPU thread count to 1 to prevent thread contention on low-vCPU environments
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -30,17 +34,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Path to YOLO model
+# Path to YOLO ONNX model
 SCRIPT_DIR = Path(__file__).resolve().parent
-MODEL_PATH = SCRIPT_DIR / "yolov8n.pt"
+MODEL_PATH = SCRIPT_DIR / "yolov8n.onnx"
 
-print(f"[BACKEND] Initializing YOLO model from: {MODEL_PATH}")
+print(f"[BACKEND] Initializing YOLO ONNX model from: {MODEL_PATH}")
 if not MODEL_PATH.exists():
     raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
 
-# Load YOLO model
-model = YOLO(str(MODEL_PATH))
-print(f"[BACKEND] YOLOv8n loaded successfully. Device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
+# Load YOLO ONNX model (uses ONNX Runtime CPUExecutionProvider)
+model = YOLO(str(MODEL_PATH), task="detect")
+print("[BACKEND] YOLOv8n ONNX loaded successfully with ONNX Runtime.")
 
 # Warm up model and ByteTrack with a blank frame
 _dummy_img = np.zeros((240, 320, 3), dtype=np.uint8)
