@@ -43,8 +43,8 @@ model = YOLO(str(MODEL_PATH))
 print(f"[BACKEND] YOLOv8n loaded successfully. Device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
 
 # Warm up model and ByteTrack with a blank frame
-_dummy_img = np.zeros((480, 640, 3), dtype=np.uint8)
-_ = model.track(source=_dummy_img, persist=True, tracker="bytetrack.yaml", verbose=False)
+_dummy_img = np.zeros((240, 320, 3), dtype=np.uint8)
+_ = model.track(source=_dummy_img, persist=True, tracker="bytetrack.yaml", imgsz=320, verbose=False)
 print("[BACKEND] Model & ByteTrack warmup complete.")
 
 # COCO Vehicle classes mapping
@@ -78,6 +78,7 @@ def process_image_and_track(
         source=img_bgr, 
         persist=True, 
         tracker="bytetrack.yaml",
+        imgsz=320,
         conf=conf_threshold, 
         iou=iou_threshold, 
         verbose=False

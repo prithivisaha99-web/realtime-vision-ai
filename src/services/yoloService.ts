@@ -1,6 +1,6 @@
 import { BackendDetectResponse, RawBackendDetection } from '../types/detection';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://realtime-vision-ai.onrender.com';
 
 /**
  * Check health / status of the Python YOLO backend.
@@ -12,7 +12,7 @@ export async function checkBackendHealth(): Promise<{
 }> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(`${API_BASE_URL}/health`, {
       signal: controller.signal,
     });

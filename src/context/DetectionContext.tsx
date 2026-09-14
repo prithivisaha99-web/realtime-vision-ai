@@ -29,6 +29,7 @@ interface DetectionContextType {
   videoSource: string;
   setVideoSource: (src: string) => void;
   backendConnected: boolean;
+  setBackendConnected: (connected: boolean) => void;
 }
 
 const defaultSettings: DetectionSettings = {
@@ -75,26 +76,45 @@ export const DetectionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Track real FPS and detection intervals
   const lastDetectionTimeRef = useRef<number>(performance.now());
   const frameTimesRef = useRef<number[]>([]);
+  const lastSuccessfulDetectionTimeRef = useRef<number>(0);
+  const isCheckingHealthRef = useRef<boolean>(false);
 
-  // Periodic Backend Health Check
+  // Periodic Backend Health Check (Active ONLY when live camera detection is NOT active)
   useEffect(() => {
     let isMounted = true;
 
     const performHealthCheck = async () => {
-      const health = await checkBackendHealth();
-      if (isMounted) {
-        setBackendConnected(health.online);
+      // Completely pause /health requests while live camera detection is active.
+      // /detect itself serves as the backend heartbeat.
+      if (cameraActive && isActive) {
+        return;
+      }
+
+      if (isCheckingHealthRef.current) return;
+      isCheckingHealthRef.current = true;
+
+      try {
+        const health = await checkBackendHealth();
+        if (isMounted) {
+          setBackendConnected(health.online);
+        }
+      } catch {
+        if (isMounted) {
+          setBackendConnected(false);
+        }
+      } finally {
+        isCheckingHealthRef.current = false;
       }
     };
 
     void performHealthCheck();
-    const interval = setInterval(performHealthCheck, 3000);
+    const interval = setInterval(performHealthCheck, 5000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [cameraActive, isActive]);
 
   const updateSettings = useCallback((newSettings: Partial<DetectionSettings>) => {
     setSettings((prev) => {
@@ -128,6 +148,9 @@ export const DetectionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     inferenceMs: number = 0,
     trackingMs: number = 0
   ) => {
+    lastSuccessfulDetectionTimeRef.current = performance.now();
+    setBackendConnected(true);
+
     const now = performance.now();
     const elapsed = now - lastDetectionTimeRef.current;
     lastDetectionTimeRef.current = now;
@@ -237,6 +260,7 @@ export const DetectionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         videoSource,
         setVideoSource,
         backendConnected,
+        setBackendConnected,
       }}
     >
       {children}

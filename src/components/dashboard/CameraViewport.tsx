@@ -49,6 +49,7 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ onFullscreenTogg
     videoSource,
     setVideoSource,
     backendConnected,
+    setBackendConnected,
     setRealDetections,
   } = useDetection();
 
@@ -62,6 +63,8 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ onFullscreenTogg
   const isMountedRef = useRef<boolean>(true);
   /** Prevents frame queue build-up during YOLO inference */
   const isInferringRef = useRef<boolean>(false);
+  /** Tracks consecutive detection network errors */
+  const consecutiveDetectionFailuresRef = useRef<number>(0);
 
   // Temporary frame capture debug telemetry state
   const isCaptureActive = isWebcamActive && cameraActive;
@@ -99,13 +102,24 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ onFullscreenTogg
               );
               if (isMountedRef.current && isCaptureActive && isActive) {
                 if (res && res.status === 'success') {
+                  consecutiveDetectionFailuresRef.current = 0;
                   setRealDetections(res.detections, res.inference_ms, res.tracking_ms);
                 } else if (res && res.detections) {
+                  consecutiveDetectionFailuresRef.current = 0;
                   setRealDetections(res.detections, res.inference_ms, res.tracking_ms);
+                } else {
+                  consecutiveDetectionFailuresRef.current += 1;
+                  if (consecutiveDetectionFailuresRef.current >= 3) {
+                    setBackendConnected(false);
+                  }
                 }
               }
             } catch (err) {
               console.warn('[CameraViewport] Detection request failed:', err);
+              consecutiveDetectionFailuresRef.current += 1;
+              if (consecutiveDetectionFailuresRef.current >= 3) {
+                setBackendConnected(false);
+              }
             } finally {
               isInferringRef.current = false;
             }
@@ -117,11 +131,13 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ onFullscreenTogg
         0.85
       );
     }
-  }, [isCaptureActive, isActive, settings.confidenceThreshold, settings.iouThreshold, setRealDetections]);
+  }, [isCaptureActive, isActive, settings.confidenceThreshold, settings.iouThreshold, setRealDetections, setBackendConnected]);
 
   // Dedicated Frame Capture Layer
   useFrameCapture(videoRef, isCaptureActive, {
     targetFps: 30,
+    maxWidth: 320,
+    maxHeight: 240,
     onFrame: handleFrameCaptured,
   });
 
