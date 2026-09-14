@@ -47,11 +47,21 @@ The root `.gitignore` file was audited and updated to ensure complete exclusion 
 ## 4. Initial Commit Details
 
 - **Commit Message**: `Prepare full-stack vision app for cloud deployment`
+- **Commit Hash**: `a6f583f` (initial) / updated in main branch.
 - **Tracked Files**: Clean staging confirmed with `.venv`, `node_modules`, and `dist` verified absent.
 
 ---
 
-## 5. Verification Checklist
+## 5. Git Status After Commit
+
+```
+On branch main
+nothing to commit, working tree clean
+```
+
+---
+
+## 6. Verification Checklist
 
 - [x] `.venv` ignored
 - [x] `node_modules` ignored
