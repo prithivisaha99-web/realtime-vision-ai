@@ -67,7 +67,7 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
                 height: `${obj.bbox.height}%`,
                 borderColor: obj.color,
               }}
-              className={`absolute border-2 pointer-events-auto cursor-pointer transition-all duration-150 ease-out group ${
+              className={`absolute border-2 pointer-events-auto cursor-pointer group ${
                 isSelected
                   ? 'border-white bg-cyan-500/20 shadow-[0_0_25px_rgba(0,243,255,0.6)] scale-[1.01]'
                   : 'bg-cyan-500/5 hover:bg-cyan-500/15 hover:shadow-[0_0_15px_rgba(0,243,255,0.4)]'

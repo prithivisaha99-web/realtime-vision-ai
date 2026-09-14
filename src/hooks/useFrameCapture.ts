@@ -115,14 +115,13 @@ export function useFrameCapture(
           // Draw current video frame to offscreen canvas
           ctx.drawImage(video, 0, 0, destWidth, destHeight);
 
-          // Extract raw pixel data
-          const imageData = ctx.getImageData(0, 0, destWidth, destHeight);
-
           frameIdCounterRef.current += 1;
           const capturedFrame: CapturedFrame = {
             width: destWidth,
             height: destHeight,
-            data: imageData,
+            get data() {
+              return ctx.getImageData(0, 0, destWidth, destHeight);
+            },
             timestamp: now,
             frameId: frameIdCounterRef.current,
             canvas: canvas,

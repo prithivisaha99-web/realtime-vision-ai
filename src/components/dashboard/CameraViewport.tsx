@@ -4,6 +4,7 @@ import { DetectionOverlay } from './DetectionOverlay';
 import { soundEffects } from '../../utils/soundEffects';
 import { useFrameCapture } from '../../hooks/useFrameCapture';
 import { detectFrameBlob } from '../../services/yoloService';
+import { detectFrameCanvas, initBrowserYolo } from '../../services/browserYoloService';
 import type { CapturedFrame } from '../../types/frame';
 import { 
   Camera, 
@@ -61,13 +62,18 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ onFullscreenTogg
   const streamRef = useRef<MediaStream | null>(null);
   /** Guards against state updates / leaked tracks after the component unmounts. */
   const isMountedRef = useRef<boolean>(true);
-  /** Prevents frame queue build-up during YOLO inference */
+  /** Prevents overlapping browser YOLO inference requests */
   const isInferringRef = useRef<boolean>(false);
   /** Tracks consecutive detection network errors */
   const consecutiveDetectionFailuresRef = useRef<number>(0);
 
-  // Temporary frame capture debug telemetry state
+  // Eagerly initialize browser YOLO model on component mount
+  useEffect(() => {
+    void initBrowserYolo();
+  }, []);
+
   const isCaptureActive = isWebcamActive && cameraActive;
+  const lastDebugUpdateRef = useRef<number>(0);
   const [frameDebugInfo, setFrameDebugInfo] = useState<{
     frameId: number;
     width: number;
@@ -81,55 +87,59 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ onFullscreenTogg
   });
 
   const handleFrameCaptured = useCallback((frame: CapturedFrame) => {
-    setFrameDebugInfo({
-      frameId: frame.frameId,
-      width: frame.width,
-      height: frame.height,
-      lastCaptureTime: frame.timestamp,
-    });
+    const now = frame.timestamp;
+    if (now - lastDebugUpdateRef.current > 500) {
+      lastDebugUpdateRef.current = now;
+      setFrameDebugInfo({
+        frameId: frame.frameId,
+        width: frame.width,
+        height: frame.height,
+        lastCaptureTime: frame.timestamp,
+      });
+    }
 
-    // Real-Time YOLO Inference on live captured frame
+    // Real-Time YOLO Inference directly on live captured canvas via Browser ONNX Runtime Web WASM
     if (isCaptureActive && isActive && frame.canvas && !isInferringRef.current) {
       isInferringRef.current = true;
-      frame.canvas.toBlob(
-        async (blob) => {
-          if (blob && isMountedRef.current && isCaptureActive && isActive) {
-            try {
-              const res = await detectFrameBlob(
-                blob, 
-                settings.confidenceThreshold, 
-                settings.iouThreshold
-              );
-              if (isMountedRef.current && isCaptureActive && isActive) {
-                if (res && res.status === 'success') {
-                  consecutiveDetectionFailuresRef.current = 0;
-                  setRealDetections(res.detections, res.inference_ms, res.tracking_ms);
-                } else if (res && res.detections) {
-                  consecutiveDetectionFailuresRef.current = 0;
-                  setRealDetections(res.detections, res.inference_ms, res.tracking_ms);
-                } else {
-                  consecutiveDetectionFailuresRef.current += 1;
-                  if (consecutiveDetectionFailuresRef.current >= 3) {
-                    setBackendConnected(false);
-                  }
-                }
+      (async () => {
+        try {
+          const res = await detectFrameCanvas(
+            frame.canvas!,
+            settings.confidenceThreshold,
+            settings.iouThreshold
+          );
+          if (isMountedRef.current && isCaptureActive && isActive) {
+            if (res && res.status === 'success') {
+              consecutiveDetectionFailuresRef.current = 0;
+              setRealDetections(res.detections, res.inference_ms, res.tracking_ms);
+              if (typeof window !== 'undefined') {
+                (window as unknown as { __LATEST_BROWSER_DETECTION__: unknown }).__LATEST_BROWSER_DETECTION__ = {
+                  ...res,
+                  wallTime: Date.now(),
+                };
               }
-            } catch (err) {
-              console.warn('[CameraViewport] Detection request failed:', err);
+            } else if (res && res.detections) {
+              consecutiveDetectionFailuresRef.current = 0;
+              setRealDetections(res.detections, res.inference_ms, res.tracking_ms);
+              if (typeof window !== 'undefined') {
+                (window as unknown as { __LATEST_BROWSER_DETECTION__: unknown }).__LATEST_BROWSER_DETECTION__ = {
+                  ...res,
+                  wallTime: Date.now(),
+                };
+              }
+            } else {
               consecutiveDetectionFailuresRef.current += 1;
-              if (consecutiveDetectionFailuresRef.current >= 3) {
+              if (consecutiveDetectionFailuresRef.current >= 5) {
                 setBackendConnected(false);
               }
-            } finally {
-              isInferringRef.current = false;
             }
-          } else {
-            isInferringRef.current = false;
           }
-        },
-        'image/jpeg',
-        0.85
-      );
+        } catch (err) {
+          console.warn('[CameraViewport] Browser YOLO inference error:', err);
+        } finally {
+          isInferringRef.current = false;
+        }
+      })();
     }
   }, [isCaptureActive, isActive, settings.confidenceThreshold, settings.iouThreshold, setRealDetections, setBackendConnected]);
 
